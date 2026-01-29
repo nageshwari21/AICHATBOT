@@ -1,16 +1,11 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "src/server.js",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
