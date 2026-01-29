@@ -6,8 +6,10 @@ import { fileURLToPath } from "url";
 
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
+import connectDB from "./lib/db.js"; // ✅ ADD
 
 dotenv.config();
+connectDB(); // ✅ ADD
 
 // Fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -30,7 +32,6 @@ if (process.env.NODE_ENV === "production") {
 
   app.use(express.static(frontendPath));
 
-  // Fallback for SPA routes
   app.use((req, res) => {
     res.sendFile(path.join(frontendPath, "index.html"));
   });
