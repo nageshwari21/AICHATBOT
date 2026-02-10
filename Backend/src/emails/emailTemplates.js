@@ -47,4 +47,4 @@ export function createWelcomeEmailTemplate(name, clientURL) {
   </body>
   </html>
   `;
-} 
+}

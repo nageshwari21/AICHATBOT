@@ -1,27 +1,20 @@
+import cloudinary from "../lib/cloudinary.js";
+import { getReceiverSocketId, io } from "../lib/socket.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 
-/**
- * Get all contacts except logged-in user
- */
 export const getAllContacts = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
+    const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
 
-    const users = await User.find({
-      _id: { $ne: loggedInUserId },
-    }).select("-password");
-
-    res.status(200).json(users);
+    res.status(200).json(filteredUsers);
   } catch (error) {
-    console.log("Error in getAllContacts:", error.message);
+    console.log("Error in getAllContacts:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-/**
- * Get messages between two users
- */
 export const getMessagesByUserId = async (req, res) => {
   try {
     const myId = req.user._id;
@@ -32,67 +25,70 @@ export const getMessagesByUserId = async (req, res) => {
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-    }).sort({ createdAt: 1 });
+    });
 
     res.status(200).json(messages);
   } catch (error) {
-    console.log("Error in getMessagesByUserId:", error.message);
+    console.log("Error in getMessages controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-/**
- * Send message (TEXT ONLY)
- */
 export const sendMessage = async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, image } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
-    if (!text) {
-      return res.status(400).json({ message: "Text is required" });
+    if (!text && !image) {
+      return res.status(400).json({ message: "Text or image is required." });
     }
-
     if (senderId.equals(receiverId)) {
-      return res.status(400).json({ message: "Cannot message yourself" });
+      return res.status(400).json({ message: "Cannot send messages to yourself." });
     }
-
     const receiverExists = await User.exists({ _id: receiverId });
     if (!receiverExists) {
-      return res.status(404).json({ message: "Receiver not found" });
+      return res.status(404).json({ message: "Receiver not found." });
+    }
+
+    let imageUrl;
+    if (image) {
+      // upload base64 image to cloudinary
+      const uploadResponse = await cloudinary.uploader.upload(image);
+      imageUrl = uploadResponse.secure_url;
     }
 
     const newMessage = new Message({
       senderId,
       receiverId,
       text,
+      image: imageUrl,
     });
 
     await newMessage.save();
 
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", newMessage);
+    }
+
     res.status(201).json(newMessage);
   } catch (error) {
-    console.log("Error in sendMessage:", error.message);
+    console.log("Error in sendMessage controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-/**
- * Get all chat partners
- */
 export const getChatPartners = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
 
+    // find all the messages where the logged-in user is either sender or receiver
     const messages = await Message.find({
-      $or: [
-        { senderId: loggedInUserId },
-        { receiverId: loggedInUserId },
-      ],
+      $or: [{ senderId: loggedInUserId }, { receiverId: loggedInUserId }],
     });
 
-    const partnerIds = [
+    const chatPartnerIds = [
       ...new Set(
         messages.map((msg) =>
           msg.senderId.toString() === loggedInUserId.toString()
@@ -102,13 +98,11 @@ export const getChatPartners = async (req, res) => {
       ),
     ];
 
-    const partners = await User.find({
-      _id: { $in: partnerIds },
-    }).select("-password");
+    const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select("-password");
 
-    res.status(200).json(partners);
+    res.status(200).json(chatPartners);
   } catch (error) {
-    console.log("Error in getChatPartners:", error.message);
+    console.error("Error in getChatPartners: ", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
